@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
 
   try {
     const tokens = await getTokensFromCode(code);
+    console.log("[AUTH CALLBACK] Granted scopes:", tokens.scope);
+    console.log("[AUTH CALLBACK] Token keys:", Object.keys(tokens));
     const cookieStore = await cookies();
 
     // Store tokens in httpOnly cookie
