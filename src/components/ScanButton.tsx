@@ -2,32 +2,17 @@
 
 import { useState } from "react";
 import { FileSearch, Loader2 } from "lucide-react";
+import type { ScanResult } from "@/types/scan";
+
+// Re-export types for backward compatibility with other components
+export type { ScanResult, ScanFinding, SenderRiskInfo } from "@/types/scan";
 
 type ScanButtonProps = {
   onScanComplete: (result: ScanResult) => void;
+  knownContactsOnly?: boolean;
 };
 
-export type ScanResult = {
-  scan_id: string;
-  total_files: number;
-  files_with_pii: number;
-  all_clean: boolean;
-  findings: ScanFinding[];
-  can_redact: boolean;
-};
-
-export type ScanFinding = {
-  file_id: string;
-  file_name: string;
-  file_type: "doc" | "sheet";
-  pii_types: string[];
-  pii_details: { type: string; value_preview: string; location: string }[];
-  risk_level: "high" | "medium" | "low";
-  redacted: boolean;
-  verified_clean: boolean;
-};
-
-export default function ScanButton({ onScanComplete }: ScanButtonProps) {
+export default function ScanButton({ onScanComplete, knownContactsOnly }: ScanButtonProps) {
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +21,11 @@ export default function ScanButton({ onScanComplete }: ScanButtonProps) {
     setError(null);
 
     try {
-      const res = await fetch("/api/scan", { method: "POST" });
+      const res = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ knownContactsOnly: knownContactsOnly ?? false }),
+      });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Scan failed");

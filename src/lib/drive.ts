@@ -7,6 +7,10 @@ export type DriveFile = {
   name: string;
   mimeType: string;
   modifiedTime: string;
+  ownerEmail?: string;
+  ownerName?: string;
+  sharedBy?: string[];
+  lastModifiedBy?: string;
 };
 
 const DOC_MIME = "application/vnd.google-apps.document";
@@ -14,7 +18,7 @@ const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
 
 export async function listRecentFiles(
   auth: AuthClient,
-  maxResults = 50
+  maxResults = 15
 ): Promise<DriveFile[]> {
   const drive = google.drive({ version: "v3", auth });
 
@@ -22,7 +26,7 @@ export async function listRecentFiles(
     q: `(mimeType='${DOC_MIME}' or mimeType='${SHEET_MIME}') and trashed=false`,
     orderBy: "modifiedTime desc",
     pageSize: maxResults,
-    fields: "files(id,name,mimeType,modifiedTime)",
+    fields: "files(id,name,mimeType,modifiedTime,owners,sharingUser,lastModifyingUser)",
   });
 
   return (data.files || []).map((f) => ({
@@ -30,6 +34,10 @@ export async function listRecentFiles(
     name: f.name!,
     mimeType: f.mimeType!,
     modifiedTime: f.modifiedTime!,
+    ownerEmail: f.owners?.[0]?.emailAddress || undefined,
+    ownerName: f.owners?.[0]?.displayName || undefined,
+    sharedBy: f.sharingUser?.emailAddress ? [f.sharingUser.emailAddress] : undefined,
+    lastModifiedBy: f.lastModifyingUser?.emailAddress || undefined,
   }));
 }
 

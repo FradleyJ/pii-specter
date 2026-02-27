@@ -14,6 +14,11 @@ const SCOPES_WRITE = [
   "https://www.googleapis.com/auth/spreadsheets",
 ];
 
+const SCOPES_GMAIL = [
+  ...SCOPES_READONLY,
+  "https://www.googleapis.com/auth/gmail.readonly",
+];
+
 export function createOAuth2Client() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -22,12 +27,24 @@ export function createOAuth2Client() {
   );
 }
 
-export function getAuthUrl(includeWrite = false) {
+export function getAuthUrl(options: { includeWrite?: boolean; includeGmail?: boolean } = {}) {
   const client = createOAuth2Client();
+  let scopes = [...SCOPES_READONLY];
+
+  if (options.includeWrite) {
+    scopes.push(
+      "https://www.googleapis.com/auth/documents",
+      "https://www.googleapis.com/auth/spreadsheets"
+    );
+  }
+  if (options.includeGmail) {
+    scopes.push("https://www.googleapis.com/auth/gmail.readonly");
+  }
+
   return client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: includeWrite ? SCOPES_WRITE : SCOPES_READONLY,
+    scope: scopes,
   });
 }
 
@@ -78,4 +95,9 @@ export function hasWriteScopes(tokens: { scope?: string }): boolean {
     tokens.scope.includes("documents") &&
     tokens.scope.includes("spreadsheets")
   );
+}
+
+export function hasGmailScope(tokens: { scope?: string }): boolean {
+  if (!tokens.scope) return false;
+  return tokens.scope.includes("gmail.readonly");
 }

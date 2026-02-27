@@ -25,6 +25,7 @@ export type GeminiFinding = {
   location: string;
   severity: "high" | "medium" | "low";
   recommendation: string;
+  masked_preview?: string;
 };
 
 const SCAN_PROMPT = `You are a PII (Personally Identifiable Information) scanner for a CPA firm's compliance tool.
@@ -44,6 +45,15 @@ Analyze the following document text for ANY personally identifiable information,
 - Tax ID numbers
 - Client names paired with financial data
 
+IMPORTANT: For each finding, provide a "masked_preview" field with a partially masked version of the detected value so the user can verify accuracy without seeing the full PII. Masking rules:
+- SSN: "***-**-1234" (show last 4)
+- Phone: "(***) ***-5678" (show last 4)
+- Email: "j***@domain.com" (show first letter + domain)
+- Address: "123 **** St" (show house number + street suffix)
+- Credit Card: "****-****-****-5678" (show last 4)
+- DOB: "**/**/1990" (show year only)
+- Other types: show first 2 and last 2 characters with *** in between
+
 Respond in JSON format ONLY:
 {
   "hasPII": true/false,
@@ -52,7 +62,8 @@ Respond in JSON format ONLY:
       "type": "SSN|EIN|BankAccount|CreditCard|DOB|Phone|Email|Address|DriverLicense|Passport|TaxID|ClientFinancial|Other",
       "location": "description of where found (e.g., 'paragraph 3', 'near beginning')",
       "severity": "high|medium|low",
-      "recommendation": "specific redaction recommendation"
+      "recommendation": "specific redaction recommendation",
+      "masked_preview": "partially masked value for user verification"
     }
   ],
   "confidence": 0.0-1.0,
@@ -88,7 +99,7 @@ Document text to verify:
 
 export async function scanWithGemini(text: string): Promise<GeminiPIIResult> {
   const ai = getGenAI();
-  const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = ai.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
   // Truncate very long documents to stay within token limits
   const truncated = text.length > 30000 ? text.slice(0, 30000) + "\n[TRUNCATED]" : text;
@@ -115,7 +126,7 @@ export async function verifyCleanDocument(text: string): Promise<{
   confidence: number;
 }> {
   const ai = getGenAI();
-  const model = ai.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = ai.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
   const truncated = text.length > 30000 ? text.slice(0, 30000) + "\n[TRUNCATED]" : text;
 

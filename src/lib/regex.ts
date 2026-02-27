@@ -34,7 +34,11 @@ const PII_PATTERNS: { type: string; pattern: RegExp; mask: (v: string) => string
   {
     type: "Date of Birth",
     pattern: /\b((?:0[1-9]|1[0-2])[\/\-](?:0[1-9]|[12]\d|3[01])[\/\-](?:19|20)\d{2})\b/g,
-    mask: () => "**/**/****",
+    mask: (v) => {
+      // Show year only: "**/**/1990"
+      const parts = v.split(/[\/\-]/);
+      return `**/**/${parts[2] || "****"}`;
+    },
   },
   {
     type: "Phone Number",
@@ -52,7 +56,15 @@ const PII_PATTERNS: { type: string; pattern: RegExp; mask: (v: string) => string
   {
     type: "Street Address",
     pattern: /\b(\d{1,5}\s+(?:[A-Z][a-z]+\s*){1,4}(?:St|Street|Ave|Avenue|Blvd|Boulevard|Dr|Drive|Ln|Lane|Rd|Road|Ct|Court|Way|Pl|Place)\.?)\b/gi,
-    mask: () => "[ADDRESS REDACTED]",
+    mask: (v) => {
+      // Partial mask: show house number + city context, mask street name
+      // "123 Main Street" → "123 **** St"
+      const numMatch = v.match(/^(\d{1,5})\s+/);
+      const suffixMatch = v.match(/(St|Street|Ave|Avenue|Blvd|Boulevard|Dr|Drive|Ln|Lane|Rd|Road|Ct|Court|Way|Pl|Place)\.?$/i);
+      const num = numMatch ? numMatch[1] : "***";
+      const suffix = suffixMatch ? suffixMatch[1] : "St";
+      return `${num} **** ${suffix}`;
+    },
   },
 ];
 

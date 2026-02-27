@@ -1,4 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
+import type { ScanFinding, UserExclusion, UserFeedback } from "@/types/scan";
+
+// Re-export types for backward compatibility
+export type { ScanFinding, UserExclusion, UserFeedback };
+export type { PiiDetail } from "@/types/scan";
 
 export type ScanResult = {
   id?: string;
@@ -9,23 +14,6 @@ export type ScanResult = {
   files_with_pii: number;
   all_clean: boolean;
   findings: ScanFinding[];
-};
-
-export type ScanFinding = {
-  file_id: string;
-  file_name: string;
-  file_type: "doc" | "sheet";
-  pii_types: string[];
-  pii_details: PiiDetail[];
-  risk_level: "high" | "medium" | "low";
-  redacted: boolean;
-  verified_clean: boolean;
-};
-
-export type PiiDetail = {
-  type: string;
-  value_preview: string; // masked preview e.g. "***-**-1234"
-  location: string; // e.g. "paragraph 3" or "cell B5"
 };
 
 // Server-side client with service role key
@@ -74,16 +62,39 @@ export async function getLatestScan(userId: string) {
     .limit(1)
     .single();
 
-  if (error && error.code !== "PGRST116") throw error; // PGRST116 = no rows
+  if (error && error.code !== "PGRST116") throw error;
   return data as ScanResult | null;
 }
 
-export async function updateFindingRedacted(
-  scanId: string,
-  fileId: string
-) {
+export async function getScanHistory(userId: string, limit = 10) {
   const supabase = createServerSupabase();
-  // Fetch current scan
+  const { data, error } = await supabase
+    .from("scan_results")
+    .select("*")
+    .eq("user_id", userId)
+    .order("scanned_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data || []) as ScanResult[];
+}
+
+export async function deleteExpiredScans(retentionDays = 30) {
+  const supabase = createServerSupabase();
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - retentionDays);
+
+  const { error, count } = await supabase
+    .from("scan_results")
+    .delete({ count: "exact" })
+    .lt("scanned_at", cutoff.toISOString());
+
+  if (error) throw error;
+  return count || 0;
+}
+
+export async function updateFindingRedacted(scanId: string, fileId: string) {
+  const supabase = createServerSupabase();
   const { data: scan, error: fetchErr } = await supabase
     .from("scan_results")
     .select("findings")
@@ -105,4 +116,75 @@ export async function updateFindingRedacted(
 
   if (updateErr) throw updateErr;
   return { findings, allClean };
+}
+
+// --- User feedback / exclusions ---
+
+export async function saveUserFeedback(feedback: UserFeedback) {
+  const supabase = createServerSupabase();
+  const { data, error } = await supabase
+    .from("user_feedback")
+    .insert({
+      user_id: feedback.user_id,
+      finding_type: feedback.finding_type,
+      pattern_hash: feedback.pattern_hash,
+      raw_preview: feedback.raw_preview,
+      action: feedback.action,
+      reason: feedback.reason,
+      notes: feedback.notes,
+      apply_scope: feedback.apply_scope,
+      scan_id: feedback.scan_id,
+      file_name: feedback.file_name,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getUserExclusions(userId: string): Promise<UserExclusion[]> {
+  const supabase = createServerSupabase();
+
+  // Try the RPC function first (if migration has been run)
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc("get_user_exclusions", { p_user_id: userId });
+
+  if (!rpcError && rpcData) {
+    return rpcData as UserExclusion[];
+  }
+
+  // Fallback: direct table query
+  const { data, error } = await supabase
+    .from("user_feedback")
+    .select("finding_type, pattern_hash, raw_preview, apply_scope, reason")
+    .eq("user_id", userId)
+    .in("action", ["dismiss", "exclude"])
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data || []) as UserExclusion[];
+}
+
+export async function getUserFeedbackForScan(userId: string, scanId: string) {
+  const supabase = createServerSupabase();
+  const { data, error } = await supabase
+    .from("user_feedback")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("scan_id", scanId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data || []) as UserFeedback[];
+}
+
+export async function deleteUserFeedback(feedbackId: string) {
+  const supabase = createServerSupabase();
+  const { error } = await supabase
+    .from("user_feedback")
+    .delete()
+    .eq("id", feedbackId);
+
+  if (error) throw error;
 }
